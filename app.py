@@ -16,7 +16,7 @@ if os.path.exists(MODEL_PATH):
     model = joblib.load(MODEL_PATH)
 
 
-# Home route
+# 1. Home route
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({
@@ -25,7 +25,7 @@ def home():
     }), 200
 
 
-# Health check route for GitHub Actions
+# 2. Health check route
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({
@@ -34,7 +34,7 @@ def health_check():
     }), 200
 
 
-# Prediction route
+# 3. Student result prediction route
 @app.route("/predict", methods=["POST"])
 def predict():
 
@@ -51,6 +51,7 @@ def predict():
                 "error": "Please provide JSON input"
             }), 400
 
+        # Required input features
         required_features = [
             "attendance",
             "internal_marks",
@@ -65,7 +66,7 @@ def predict():
                     "error": f"Missing required field: {feature}"
                 }), 400
 
-        # Prepare input data
+        # Convert input into numerical array
         input_data = np.array([[
             float(data["attendance"]),
             float(data["internal_marks"]),
@@ -73,7 +74,7 @@ def predict():
             float(data["previous_score"])
         ]])
 
-        # Make prediction
+        # Predict student result
         prediction = model.predict(input_data)[0]
 
         # Convert prediction into PASS or FAIL
