@@ -1,41 +1,32 @@
 
-from pathlib import Path
-
+from flask import Flask, request, jsonify
 import joblib
-import pandas as pd
-from flask import Flask, jsonify, request
+import numpy as np
+import os
 
 app = Flask(__name__)
 
-MODEL_PATH = Path("student_result_model.pkl")
+# Model file path
+MODEL_PATH = "student_result_model.pkl"
 
-FEATURES = [
-    "attendance",
-    "internal_marks",
-    "assignment_marks",
-    "previous_score"
-]
+# Load trained ML model
+model = None
 
-
-def load_model():
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(
-            "student_result_model.pkl was not found. "
-            "Run the training pipeline first."
-        )
-    return joblib.load(MODEL_PATH)
+if os.path.exists(MODEL_PATH):
+    model = joblib.load(MODEL_PATH)
 
 
-@app.get("/")
+# Home route
+@app.route("/", methods=["GET"])
 def home():
     return jsonify({
         "status": "ok",
         "service": "student-result-prediction"
-    })
+    }), 200
 
 
-# Health endpoint for GitHub Actions
-@app.get("/health")
+# Health check route for GitHub Actions
+@app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({
         "status": "healthy",
@@ -43,40 +34,74 @@ def health_check():
     }), 200
 
 
-@app.post("/predict")
+# Prediction route
+@app.route("/predict", methods=["POST"])
 def predict():
-    data = request.get_json(silent=True)
 
-    if not data:
+    if model is None:
         return jsonify({
-            "error": "JSON request body is required"
+            "error": "Model file not found"
+        }), 500
+
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "error": "Please provide JSON input"
+            }), 400
+
+        required_features = [
+            "attendance",
+            "internal_marks",
+            "assignment_marks",
+            "previous_score"
+        ]
+
+        # Validate input fields
+        for feature in required_features:
+            if feature not in data:
+                return jsonify({
+                    "error": f"Missing required field: {feature}"
+                }), 400
+
+        # Prepare input data
+        input_data = np.array([[
+            float(data["attendance"]),
+            float(data["internal_marks"]),
+            float(data["assignment_marks"]),
+            float(data["previous_score"])
+        ]])
+
+        # Make prediction
+        prediction = model.predict(input_data)[0]
+
+        # Convert prediction into PASS or FAIL
+        if isinstance(prediction, str):
+            result = prediction.upper()
+        else:
+            result = "PASS" if int(prediction) == 1 else "FAIL"
+
+        return jsonify({
+            "prediction": result,
+            "status": "success"
+        }), 200
+
+    except (ValueError, TypeError):
+        return jsonify({
+            "error": "All input values must be valid numbers"
         }), 400
 
-    missing_fields = [
-        feature for feature in FEATURES
-        if feature not in data
-    ]
-
-    if missing_fields:
+    except Exception as e:
         return jsonify({
-            "error": "Missing required fields",
-            "missing_fields": missing_fields
-        }), 400
-
-    sample = pd.DataFrame([{
-        feature: data[feature]
-        for feature in FEATURES
-    }])
-
-    model = load_model()
-    prediction_code = int(model.predict(sample)[0])
-    prediction = "PASS" if prediction_code == 1 else "FAIL"
-
-    return jsonify({
-        "prediction": prediction,
-        "prediction_code": prediction_code
-    })
+            "error": str(e)
+        }), 500
 
 
+# Run Flask application
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=False
+    )
