@@ -1,3 +1,4 @@
+
 from pathlib import Path
 
 import joblib
@@ -7,6 +8,7 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 MODEL_PATH = Path("student_result_model.pkl")
+
 FEATURES = [
     "attendance",
     "internal_marks",
@@ -25,11 +27,20 @@ def load_model():
 
 
 @app.get("/")
-def health_check():
+def home():
     return jsonify({
         "status": "ok",
         "service": "student-result-prediction"
     })
+
+
+# Health endpoint for GitHub Actions
+@app.get("/health")
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "service": "student-result-prediction"
+    }), 200
 
 
 @app.post("/predict")
@@ -37,7 +48,9 @@ def predict():
     data = request.get_json(silent=True)
 
     if not data:
-        return jsonify({"error": "JSON request body is required"}), 400
+        return jsonify({
+            "error": "JSON request body is required"
+        }), 400
 
     missing_fields = [
         feature for feature in FEATURES
